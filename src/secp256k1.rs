@@ -44,7 +44,7 @@ impl<F,T> Debug for P256<F, T> where F:Fq, T:Ford {
 impl<F, T> ECGroup<F, T> for P256<F, T> 
 	where F: Fq, T: Ford {
 
-	const INF: Self = P256 { x:F::ZERO, y: F::ZERO, z: F::ONE, inf: true, p: PhantomData };
+	const INF: Self = P256 { x:F::ZERO, y: F::ONE, z: F::ZERO, inf: true, p: PhantomData };
 	const NBYTES: usize = 2*F::NBYTES;
 
 	fn gen() -> Self {
@@ -77,7 +77,7 @@ impl<F, T> ECGroup<F, T> for P256<F, T>
 		}
 	}
 
-
+	// can also generate by hashing to the curve
 	fn rand(rng: &mut Rng) -> (T, Self) {
 		let x = <T as Ford>::rand(rng);
 		let p = Self::scalar_gen(&x).affine();
@@ -87,18 +87,23 @@ impl<F, T> ECGroup<F, T> for P256<F, T>
 	fn is_infinity(&self) -> bool { self.inf }
 
 	fn affine(&self) -> Self {
-		let zi = self.z.inv();
-		let mut x = self.x.mul(&zi);
-		let mut y = self.y.mul(&zi);
+		if self.inf {
+			Self::INF
+		} else {
+			let zi = self.z.inv();
+			let mut x = self.x.mul(&zi);
+			let mut y = self.y.mul(&zi);
 
-		x.normalize();
-		y.normalize();
+			x.normalize();
+			y.normalize();
 
-		P256 { x: x, y: y, z: F::ONE, inf: self.inf, p: PhantomData }
+			P256 { x: x, y: y, z: F::ONE, inf: self.inf, p: PhantomData }
+
+		}
 	}
 
 	fn op(a: &Self, b: &Self) -> Self  {
-		// algorith 7 from https://eprint.iacr.org/2015/1060.pdf
+		// algorithm 7 from https://eprint.iacr.org/2015/1060.pdf
 		if b.inf {
 			return P256 { x: a.x, y: a.y, z: a.z, inf: a.inf, p: PhantomData }
 		} else if a.inf {
@@ -150,7 +155,9 @@ impl<F, T> ECGroup<F, T> for P256<F, T>
 		x3.normalize();
 		y3.normalize();
 		z3.normalize();
-		P256 { x: x3, y: y3, z: z3, inf: false, p: PhantomData }
+
+		let inf = x3.is_zero() && z3.is_zero();
+		P256 { x: x3, y: y3, z: z3, inf: inf, p: PhantomData }
 	}
 
 
@@ -178,6 +185,8 @@ impl<F, T> ECGroup<F, T> for P256<F, T>
 		z3.normalize();
 		x3.normalize();
 		y3.normalize();
+		
+
 		P256 { x:x3, y:y3, z:z3, inf: self.inf, p: PhantomData }
 	}
 
@@ -216,9 +225,16 @@ impl<F, T> ECGroup<F, T> for P256<F, T>
 			F::swap(&mut r0.x, &mut r1.x, b as u32);
 			F::swap(&mut r0.y, &mut r1.y, b as u32);
 			F::swap(&mut r0.z, &mut r1.z, b as u32);
+			r0.inf = ((b==false)&r0.inf) | ((b==true)&r1.inf);
+			r1.inf = ((b==false)&r1.inf) | ((b==true)&r0.inf);
 
 		}
-		return P256 { x:r0.x, y:r0.y, z:r0.z, inf:r0.inf, p: PhantomData }
+
+		let inf = r0.x.is_zero() && r0.z.is_zero();
+		if inf {
+			r0.y = F::ONE;
+		}
+		return P256 { x:r0.x, y:r0.y, z:r0.z, inf:inf, p: PhantomData }
 	}
 
 	fn scalar_table(&self, x:&T) -> Self {
@@ -519,6 +535,49 @@ mod tests {
 	}
 
 	#[test]
+	fn test_op_inf() {
+		let inf = P256::<FSecp256, FSecp256Ord>::INF;
+
+		let ord = FSecp256Ord::from_slice(&[0xBFD25E8CD0364141, 0xBAAEDCE6AF48A03B, 0xFFFFFFFFFFFFFFFE, 0xFFFFFFFFFFFFFFFF]);
+		let g: P256<FSecp256, FSecp256Ord> = P256::gen();
+		let gx = g.scalar(&ord).affine();
+
+		assert!(gx==inf);
+
+		let ord = FSecp256Ord::from_slice(&[0xBFD25E8CD0364140, 0xBAAEDCE6AF48A03B, 0xFFFFFFFFFFFFFFFE, 0xFFFFFFFFFFFFFFFF]);
+		let gxi = g.scalar(&ord).affine();
+		let id = P256::op(&g, &gxi).affine();
+
+		assert!(id==inf);
+
+		let gi = g.neg();
+		let id = P256::op(&g, &gi).affine();
+
+		assert!(id==inf);
+
+		let ga = P256::op(&g, &inf).affine();
+		assert!(ga==g);
+
+		let ga = P256::op(&inf, &g).affine();
+		assert!(ga==g);
+
+		let ga = P256::op(&inf, &inf).affine();
+		assert!(ga==inf);
+
+		let h = P256 { x: FSecp256::from_slice(&[0x1f9c9f527a236, 0xdd306f4eef9fa, 0x515a3a3c1c99d, 0x1d7adf97384d4, 0x52a3e8ff594f]),
+	       y: FSecp256::from_slice(&[0xf3af0c5cda397, 0xca9fa1b05bedf, 0xdb5a09a48a033, 0xdd716f63fc61a, 0xa90fdb8a7146]),
+	       z: FSecp256::from_slice(&[0x1, 0x0, 0x0, 0x0, 0x0]),
+	       inf: false, p: PhantomData };
+		let ga = P256::op(&h, &inf).affine();
+		assert!(ga==h);
+
+		let hi = h.neg();
+		let id = P256::op(&h, &hi).affine();
+		assert!(id==inf);
+
+	}
+
+	#[test]
 	fn test_scalar() {
 
 		let g: P256<FSecp256, FSecp256Ord> = P256::gen();
@@ -659,7 +718,7 @@ mod tests {
 		let g: P256<FSecp256, FSecp256Ord> = P256::gen();
 
         b.iter(||  {
-        	for i in 0..N {
+        	for _i in 0..N {
         		g.dbl();
         	}
         });
@@ -670,7 +729,7 @@ mod tests {
 		let g: P256<FSecp256, FSecp256Ord> = P256::gen();
 
         b.iter(||  {
-        	for i in 0..N {
+        	for _i in 0..N {
         		P256::op(&g, &g);
         	}
         });
@@ -681,7 +740,7 @@ mod tests {
 		let g: P256<FSecp256, FSecp256Ord> = P256::gen();
 
         b.iter(||  {
-        	for i in 0..N {
+        	for _i in 0..N {
         		P256::op2(&g, &g);
         	}
         });
