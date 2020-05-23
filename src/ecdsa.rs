@@ -16,7 +16,7 @@ fn hash<'a>(msg: &[u8], res: &mut [u8; 32]) {
 }
 
 
-pub fn ecdsa_keygen<F: Fq, T: Ford, E: ECGroup<F,T>>(rng: &mut Rng) -> (T, E) 
+pub fn ecdsa_keygen<F: Fq, T: Ford, E: ECGroup<F,T>>(rng: &mut dyn Rng) -> (T, E) 
 {
 	let (sk, pk) : (T, E) = E::rand(rng);
 	debug_assert!( E::gen().scalar(&sk).affine() == pk);
@@ -63,7 +63,7 @@ pub fn ecdsa_verify<F: Fq, T: Ford, E: ECGroup<F,T>>(msg: &[u8], sig: (&T, &T), 
 	ecdsa_verify_with_tables(msg, sig, &gentable[..], &pktable[..])
 }
 
-pub fn ecdsa_sign<F: Fq, T: Ford, E: ECGroup<F,T>>(msg: &[u8], sk: &T, rng: &mut Rng) -> (T, T) {
+pub fn ecdsa_sign<F: Fq, T: Ford, E: ECGroup<F,T>>(msg: &[u8], sk: &T, rng: &mut dyn Rng) -> (T, T) {
     // Calculate e = HASH ( m ) 
     // Let z be the L_{n} leftmost bits of e where L_{n} is the bit len of the grp order n.
     // Select k in [1,order-1]

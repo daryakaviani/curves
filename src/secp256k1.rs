@@ -14,7 +14,7 @@
 
 use super::{Fq, Ford, ECGroup};
 use std::fmt;
-use std::fmt::{Debug};
+use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use rand::Rng;
 
@@ -37,6 +37,12 @@ const CURVE_B3: u64 = 3*CURVE_B;
 impl<F,T> Debug for P256<F, T> where F:Fq, T:Ford {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "x: {:?}\n      y: {:?}\n      z: {:?} i:{:?}", self.x, self.y, self.z, self.inf)
+    }
+}
+
+impl<F,T> Display for P256<F, T> where F:Fq, T:Ford  {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "x:{}, y:{}, z:{}, inf:{}", self.x, self.y, self.z, self.inf)
     }
 }
 
@@ -78,7 +84,7 @@ impl<F, T> ECGroup<F, T> for P256<F, T>
 	}
 
 	// can also generate by hashing to the curve
-	fn rand(rng: &mut Rng) -> (T, Self) {
+	fn rand(rng: &mut dyn Rng) -> (T, Self) {
 		let x = <T as Ford>::rand(rng);
 		let p = Self::scalar_gen(&x).affine();
 		(x, p)
@@ -759,7 +765,7 @@ mod tests {
 
         b.iter(|| { 
         	for i in 0..N {
-				let gx = g.scalar(&x[i]).affine();
+				let _gx = g.scalar(&x[i]).affine();
         	}
         });
 	    //let a = FSecp256Ord::from_slice( &[0xf78541d24fe89bc7, 0x8a7007a0f47ac5b0, 0x9dce2824684f345f, 0x10ab8a41b7cd99b0] );
@@ -779,7 +785,7 @@ mod tests {
 
 		b.iter(|| { 
         	for i in 0..N {
-				let gx: P256<FSecp256, FSecp256Ord> = P256::scalar_table_multi(&table_h[..], &x[i]).affine();
+				let _gx: P256<FSecp256, FSecp256Ord> = P256::scalar_table_multi(&table_h[..], &x[i]).affine();
         	}
         });
     }
@@ -795,7 +801,7 @@ mod tests {
 
 		b.iter(|| { 
         	for i in 0..N {
-				let gx: P256<FSecp256, FSecp256Ord> = P256::scalar_gen(&x[i]).affine();
+				let _gx: P256<FSecp256, FSecp256Ord> = P256::scalar_gen(&x[i]).affine();
         	}
         });
     }
@@ -805,7 +811,7 @@ mod tests {
 		let x: P256<FSecp256, FSecp256Ord> = P256::gen();
 
 		b.iter(|| { 
-        	for i in 0..N {
+        	for _i in 0..N {
         		P256::precomp_table(&x);
         	}
         });

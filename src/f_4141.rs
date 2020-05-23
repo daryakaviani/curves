@@ -33,7 +33,13 @@ const LOWER64: u128 = 0x0000000000000000FFFFFFFFFFFFFFFF;
 
 impl fmt::Debug for FSecp256Ord {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[0x{:0x} 0x{:0x} 0x{:0x} 0x{:0x}]", self.v[0], self.v[1], self.v[2], self.v[3])
+        write!(f, "[0x{:0x}, 0x{:0x}, 0x{:0x}, 0x{:0x}]", self.v[0], self.v[1], self.v[2], self.v[3])
+    }
+}
+
+impl fmt::Display for FSecp256Ord {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "0x{:0x}{:0x}{:0x}{:0x}", self.v[3], self.v[2], self.v[1], self.v[0])
     }
 }
 
@@ -43,8 +49,7 @@ impl FSecp256Ord {
         assert!(overflow <= 1);
 
         let overflow =
-            if r.v[3]==0xFFFFFFFFFFFFFFFF && 
-                (r.v[2]>0xFFFFFFFFFFFFFFFE ||
+            if r.v[3]==0xFFFFFFFFFFFFFFFF && (r.v[2]>0xFFFFFFFFFFFFFFFE ||
                     (r.v[2]==0xFFFFFFFFFFFFFFFE && r.v[1]>0xBAAEDCE6AF48A03B) ||
                     (r.v[2]==0xFFFFFFFFFFFFFFFE && r.v[1]==0xBAAEDCE6AF48A03B && r.v[0]>=0xBFD25E8CD0364141)
                 )
@@ -86,6 +91,9 @@ impl FSecp256Ord {
         // q1l7
         // l7l6l5l4
 
+        // println!("L0: {:x} l1: {:x} l2: {:x} l3:{:x}",l0,l1,l2,l3);
+        // println!("l4: {:x} l5: {:x} l6: {:x} l7:{:x}",l4,l5,l6,l7);
+
         let y04 = l4 * R0; // < 127 bits
         let y05 = l5 * R0;
         let y06 = l6 * R0;
@@ -117,11 +125,11 @@ impl FSecp256Ord {
         let l2 = l2 + r2;
         let l3 = l3 + r3;
 
-        // reduce (r5 r4) * (q2 q1 q0)
-        //           r0r4
-        //         r0r5
-        //         r1r4
-        //       r1r5
+        // reduce (r5 r4) * (1 R1 R0)
+        //           R0r4
+        //         R0r5
+        //         R1r4
+        //       R1r5
         //.      r5r4
         let z04 = r4 * R0;  // each product is < 127 bits
         let z05 = r5 * R0;  
@@ -161,11 +169,12 @@ impl FSecp256Ord {
 
         // the result can still be between [q, 2q]
         let reduc: u128 =
-            if l3==0xFFFFFFFFFFFFFFFF && 
+            if l3>0xFFFFFFFFFFFFFFFF ||
+                (l3==0xFFFFFFFFFFFFFFFF && 
                 (l2>0xFFFFFFFFFFFFFFFE ||
                     (l2==0xFFFFFFFFFFFFFFFE && l1>0xBAAEDCE6AF48A03B) ||
                     (l2==0xFFFFFFFFFFFFFFFE && l1==0xBAAEDCE6AF48A03B && l0>=0xBFD25E8CD0364141)
-                )
+                ))
             { 1 } else { 0 };
 
         let l0 = l0 + reduc*R0;
@@ -174,7 +183,7 @@ impl FSecp256Ord {
         let l1 = ov + l1 + reduc*R1;
         let ov = l1 >> 64;
         let l1 = (l1 & LOWER64) as u64;
-        let l2 = ov + l2 + reduc*R2;
+        let l2 = ov + l2 + reduc;
         let ov = l2 >> 64;
         let l2 = (l2 & LOWER64) as u64;
         let l3 = ((ov + l3) & LOWER64) as u64;
@@ -209,7 +218,7 @@ impl Ford for FSecp256Ord {
     }
 
 
-    fn rand(rng: &mut Rng) -> Self {
+    fn rand(rng: &mut dyn Rng) -> Self {
         let r0 = rng.next_u64();
         let r1 = rng.next_u64();
         let r2 = rng.next_u64();
@@ -472,53 +481,53 @@ impl Ford for FSecp256Ord {
         let t = t.mul(&u5); /* 101 */
         let t = t.sqr().sqr().sqr().sqr();
 
-        let t = t.mul(&x3); /* 111 */
+        let t = t.mul(&x3); /* 0111 */
         let t = t.sqr().sqr().sqr().sqr();
 
-        let t = t.mul(&u5); /* 101 */
+        let t = t.mul(&u5); /* 0101 */
         let t = t.sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&u11); /* 1011 */
+        let t = t.mul(&u11); /* 01011 */
         let t = t.sqr().sqr().sqr().sqr();
         let t = t.mul(&u11); /* 1011 */
         let t = t.sqr().sqr().sqr().sqr();
-        let t = t.mul(&x3); /* 111 */
+        let t = t.mul(&x3); /* 0111 */
         let t = t.sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&x3); /* 111 */
+        let t = t.mul(&x3); /* 00111 */
         let t = t.sqr().sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&u13); /* 1101 */
+        let t = t.mul(&u13); /* 001101 */
         let t = t.sqr().sqr().sqr().sqr();
-        let t = t.mul(&u5); /* 101 */
+        let t = t.mul(&u5); /* 0101 */
         let t = t.sqr().sqr().sqr();
         let t = t.mul(&x3); /* 111 */
         let t = t.sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&u9); /* 1001 */
+        let t = t.mul(&u9); /* 01001 */
         let t = t.sqr().sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&u5); /* 101 */
+        let t = t.mul(&u5); /* 000101 */
         let t = t.sqr().sqr().sqr().sqr().sqr().sqr().sqr().sqr().sqr().sqr();
 
-        let t = t.mul(&x3); /* 111 */
+        let t = t.mul(&x3); /* 0000000111 */
         let t = t.sqr().sqr().sqr().sqr();
-        let t = t.mul(&x3); /* 111 */
+        let t = t.mul(&x3); /* 0111 */
         let t = t.sqr().sqr().sqr().sqr().sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&x8); /* 11111111 */
+        let t = t.mul(&x8); /* 011111111 */
         let t = t.sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&u9); /* 1001 */
+        let t = t.mul(&u9); /* 01001 */
         let t = t.sqr().sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&u11); /* 1011 */
+        let t = t.mul(&u11); /* 001011 */
         let t = t.sqr().sqr().sqr().sqr();
         let t = t.mul(&u13); /* 1101 */
         let t = t.sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&x2); /* 11 */
+        let t = t.mul(&x2); /* 00011 */
         let t = t.sqr().sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&u13); /* 1101 */
+        let t = t.mul(&u13); /* 001101 */
         let t = t.sqr().sqr().sqr().sqr().sqr().sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&u13); /* 1101 */
+        let t = t.mul(&u13); /* 0000001101 */
         let t = t.sqr().sqr().sqr().sqr();
         let t = t.mul(&u9); /* 1001 */
         let t = t.sqr().sqr().sqr().sqr().sqr().sqr();
-        let t = t.mul(&self); /* 1 */
+        let t = t.mul(&self); /* 000001 */
         let t = t.sqr().sqr().sqr().sqr().sqr().sqr().sqr().sqr();
-        let r = t.mul(&x6); /* 111111 */
+        let r = t.mul(&x6); /* 00111111 */
         r
     }
 
@@ -570,6 +579,29 @@ impl Ford for FSecp256Ord {
         let ov = l7 >> 64;
         assert!(ov == 0);
         FSecp256Ord::reduce512(l0,l1,l2,l3,l4,l5,l6,l7)
+    }
+
+    fn pow_native(&self, n: u64) -> FSecp256Ord {
+        if n == 0 {
+            return FSecp256Ord::ONE;
+        }
+
+        let mut n = n;
+        let mut x = self.clone();
+        let mut y = FSecp256Ord::ONE;
+
+        while n > 1 {
+            if n % 2 == 0 {
+                x = x.sqr();
+                n = n / 2;
+            } else {
+                y = x.mul(&y);
+                x = x.sqr();
+                n = (n-1)/2;
+            }
+        }
+
+        x.mul(&y)
     }
 
 
@@ -666,6 +698,10 @@ fn secp256k1_ord_sqr_tests() {
     let aa = a.mul(&a);
     assert!(a2==aa);
 
+    let a = FSecp256Ord { v: [0x6cf5d18fee5877a2, 0xbaaedce6af48a03a, 0xfffffffffffffffe, 0xffffffffffffffff] };
+    let a2 = a.sqr();
+    let aa = a.mul(&a);
+    assert!(a2==aa);
 
 }
 
@@ -686,7 +722,30 @@ fn secp256k1_ord_inv_tests() {
     let one = c.mul(&cinv);
     assert!(one == FSecp256Ord::ONE);
 
+    let d = FSecp256Ord { v: [ 0xbfd25e8cd0364122, 0xbaaedce6af48a03b, 0xfffffffffffffffe, 0xffffffffffffffff] };
+    let dinv = d.inv();
+    let one = d.mul(&dinv);
+    assert!(one == FSecp256Ord::ONE);
+
+    let e = FSecp256Ord { v: [ 0xbfd25e8cd0361fff, 0xbaaedce6af48a03b, 0xfffffffffffffffe, 0xffffffffffffffff] };
+    let einv = e.inv();
+    let one = e.mul(&einv);
+    assert!(one == FSecp256Ord::ONE);
+
+    let e = FSecp256Ord { v: [0x6cf5d18fee5877a2, 0xbaaedce6af48a03a, 0xfffffffffffffffe, 0xffffffffffffffff] };
+    let einv = e.inv();
+    let one = e.mul(&einv);
+    assert!(one == FSecp256Ord::ONE);
+
+    let e = FSecp256Ord { v: [ 0x0 , 0x0 , 0xfffffffffffffffe ,0xffffffffffffffff] };
+    let einv = e.inv();
+    let one = e.mul(&einv);
+    assert!(one == FSecp256Ord::ONE);
+
+
+
 }
+
 
 
 

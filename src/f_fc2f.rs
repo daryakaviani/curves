@@ -32,6 +32,12 @@ impl fmt::Debug for FSecp256 {
     }
 }
 
+impl fmt::Display for FSecp256 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "0x{:0x}{:0x}{:0x}{:0x}", self.v[3], self.v[2], self.v[1], self.v[0])
+    }
+}
+
 const M: u128 = 0x0000000000000000000FFFFFFFFFFFFF;
 const R: u128 = 0x00000000000000000000001000003D10;
 
@@ -122,7 +128,7 @@ impl Fq for FSecp256 {
         return (self.v[0]==1)&&(self.v[2]==0)&&(self.v[3]==0)&&(self.v[4]==0);
     }
 
-    fn rand(rng: &mut Rng) -> Self {
+    fn rand(rng: &mut dyn Rng) -> Self {
         let r0 = rng.next_u64() & 0xFFFFFFFFFFFFF;
         let r1 = rng.next_u64() & 0xFFFFFFFFFFFFF;
         let r2 = rng.next_u64() & 0xFFFFFFFFFFFFF;
@@ -381,7 +387,7 @@ impl Fq for FSecp256 {
         FSecp256 { v:[ r0, r1, r2, r3, r4 ]}
     }
 
-
+    #[inline(never)] // workaround for apparent bug in compiler after version 1.28
     fn sqr(&self) -> FSecp256 {
         let a = self;
 
@@ -391,13 +397,12 @@ impl Fq for FSecp256 {
         debug_assert!( a.v[3]>>56 == 0 );
         debug_assert!( a.v[4]>>52 == 0 );
 
-    //     /**  [... a b c] is a shorthand for ... + a<<104 + b<<52 + c<<0 mod n.
-    //      *  px is a shorthand for sum(a[i]*a[x-i], i=0..x).
-    //      *  Note that [x 0 0 0 0 0] = [x*R].
-    //      */
+        /*  [... a b c] is a shorthand for ... + a<<104 + b<<52 + c<<0 mod n.
+         *  px is a shorthand for sum(a[i]*a[x-i], i=0..x).
+         *  Note that [x 0 0 0 0 0] = [x*R].
+         */
 
-        let d  = (a.v[0] as u128 *2) * a.v[3] as u128
-           + (a.v[1] as u128 *2) * a.v[2] as u128;
+        let d  = (a.v[0] as u128 *2) * (a.v[3] as u128) + (a.v[1] as u128 *2) * (a.v[2] as u128);
         debug_assert!( d>>114 == 0 );
         /* [d 0 0 0] = [p3 0 0 0] */
         let c  = a.v[4] as u128 * a.v[4] as u128;
@@ -488,7 +493,7 @@ impl Fq for FSecp256 {
         let d = d >> 52;
         debug_assert!( c>>115 == 0);
         debug_assert!( d>>62 == 0);
-    //     /* [d 0 0 0 t4 t3 c r1 r0] = [p8 p7 p6 p5 p4 p3 p2 p1 p0] */
+        /* [d 0 0 0 t4 t3 c r1 r0] = [p8 p7 p6 p5 p4 p3 p2 p1 p0] */
         let r2 = (c & M) as u64; 
         let c = c >> 52;
         debug_assert!( r2>>52 == 0);
@@ -770,195 +775,193 @@ impl Fq for FSecp256 {
 #[cfg(test)]
 mod tests {
     use super::*;
-#[test]
-fn fc2f_mul_tests() {
+    #[test]
+    fn fc2f_mul_tests() {
 
-    let z = FSecp256 { v: [0,0,0,0,0] };
-    assert!( z.is_zero() );
-    assert!( !z.is_one() );
+        let z = FSecp256 { v: [0,0,0,0,0] };
+        assert!( z.is_zero() );
+        assert!( !z.is_one() );
 
-    let one = FSecp256 { v: [1,0,0,0,0] };
-    assert!( one.is_one() );
-    assert!( !one.is_zero() );
+        let one = FSecp256 { v: [1,0,0,0,0] };
+        assert!( one.is_one() );
+        assert!( !one.is_zero() );
 
-    let a = FSecp256 { v: [0xf2f3232323, 0x0, 0x0, 0x0, 0x0] };
-    let b = FSecp256 { v: [0x7358afdf6d7, 0x0, 0x0, 0x0, 0x0] };
-    let c = FSecp256 { v: [0x1b7978ddd2465, 0x6d776345, 0x0, 0x0, 0x0] };
-    let d = a.mul(&b);
-    assert!(c==d);
+        let a = FSecp256 { v: [0xf2f3232323, 0x0, 0x0, 0x0, 0x0] };
+        let b = FSecp256 { v: [0x7358afdf6d7, 0x0, 0x0, 0x0, 0x0] };
+        let c = FSecp256 { v: [0x1b7978ddd2465, 0x6d776345, 0x0, 0x0, 0x0] };
+        let d = a.mul(&b);
+        assert!(c==d);
 
-    let a = FSecp256 { v: [0x948fe6cbfda84, 0xcf716a6d8d2ca, 0xf06e640da1004, 0xd35e90cbda2c1, 0x2c6ab1504e66] };
-    let b = FSecp256 { v: [0x74271c6cb4241, 0xb4509181605e, 0x59b8c3a50b96c, 0x5463e0ea304de, 0x9a8d542d5e7e] };
-    let c = FSecp256 { v: [0x74d1f04b5d91, 0x684fc57956b57, 0x3c26eedbca101, 0x2001a88c7fdb3, 0xc56757469716] };
-    let d = a.mul(&b);
-    assert!(c==d);
+        let a = FSecp256 { v: [0x948fe6cbfda84, 0xcf716a6d8d2ca, 0xf06e640da1004, 0xd35e90cbda2c1, 0x2c6ab1504e66] };
+        let b = FSecp256 { v: [0x74271c6cb4241, 0xb4509181605e, 0x59b8c3a50b96c, 0x5463e0ea304de, 0x9a8d542d5e7e] };
+        let c = FSecp256 { v: [0x74d1f04b5d91, 0x684fc57956b57, 0x3c26eedbca101, 0x2001a88c7fdb3, 0xc56757469716] };
+        let d = a.mul(&b);
+        assert!(c==d);
 
-    let a = FSecp256 { v: [0xdb01b880bf569, 0x1b33eb9715c20, 0x2b044751fc55f, 0xd3b09e67215f6, 0xecd6ee561f55] };
-    let b = FSecp256 { v: [0xdfaa2194ed1c1, 0x58828cfc145cb, 0x7be6e5fb58e1e, 0xb7fbc3e19a0aa, 0xd11ace0ba9c2] };
-    let c = FSecp256 { v: [0x33733221bad67, 0xf6c02edf4aef2, 0xf4487b1c054bc, 0x7e3c9b1d790b2, 0xcd7c9e33ac9d] };
-    let d = a.mul(&b);
-    assert!(c==d);
+        let a = FSecp256 { v: [0xdb01b880bf569, 0x1b33eb9715c20, 0x2b044751fc55f, 0xd3b09e67215f6, 0xecd6ee561f55] };
+        let b = FSecp256 { v: [0xdfaa2194ed1c1, 0x58828cfc145cb, 0x7be6e5fb58e1e, 0xb7fbc3e19a0aa, 0xd11ace0ba9c2] };
+        let c = FSecp256 { v: [0x33733221bad67, 0xf6c02edf4aef2, 0xf4487b1c054bc, 0x7e3c9b1d790b2, 0xcd7c9e33ac9d] };
+        let d = a.mul(&b);
+        assert!(c==d);
 
-    let a = FSecp256 { v: [0xe54e93961d57e, 0x258ab1a469a67, 0x5f24fc18824e7, 0x43669a6001d33, 0xbaf07785a062] };
-    let b = FSecp256 { v: [0xf330263ed72d1, 0x4457730988523, 0xa441d727827d0, 0x1375f423b04bf, 0xc618df5ea932] };
-    let c = FSecp256 { v: [0xce6f9342b2482, 0xd12c57ae5dafc, 0x4d5dd5188f612, 0x9c10bb751e3ca, 0x2c9a4b825903] };
-    let d = a.mul(&b);
-    assert!(c==d);
+        let a = FSecp256 { v: [0xe54e93961d57e, 0x258ab1a469a67, 0x5f24fc18824e7, 0x43669a6001d33, 0xbaf07785a062] };
+        let b = FSecp256 { v: [0xf330263ed72d1, 0x4457730988523, 0xa441d727827d0, 0x1375f423b04bf, 0xc618df5ea932] };
+        let c = FSecp256 { v: [0xce6f9342b2482, 0xd12c57ae5dafc, 0x4d5dd5188f612, 0x9c10bb751e3ca, 0x2c9a4b825903] };
+        let d = a.mul(&b);
+        assert!(c==d);
 
-    let a = FSecp256 { v: [0xef56a2f75b904, 0xe1df41f96ef17, 0x12a23ede91fc8, 0xd9507cf40f5cc, 0x8fa5308760e3] };
-    let b = FSecp256 { v: [0x544f9f64ac1f7, 0x44e3919b4a090, 0x260aeb700ad46, 0xfd0df8dacdfee, 0xe869c700ef3f] };
-    let c = FSecp256 { v: [0x3a8271f1f4e82, 0x86e420ef76dca, 0xc20c656e97711, 0xc98fae2e2dd95, 0xc2c8cfa49cbd] };
-    let d = a.mul(&b);
-    println!("d= {:x} {:x} {:x} {:x} {:x} ", d.v[0], d.v[1], d.v[2], d.v[3], d.v[4]);
-    assert!(c==d);
-
-
-    let a = FSecp256 { v: [0x0, 0x0, 0xffffffe000000, 0xfffffffffffff, 0xffffffffffff] };
-    let b = FSecp256 { v: [0xffffefffffc2e, 0xfffffffffffff, 0xfffffffffffff, 0xfffffffffffff, 0xffffffffffff] };
-    let c = FSecp256 { v: [0xffffefffffc2f, 0xfffffffffffff, 0x1ffffff, 0x0, 0x0] };
-    let d = a.mul(&b);
-    println!("d= {:x} {:x} {:x} {:x} {:x} ", d.v[0], d.v[1], d.v[2], d.v[3], d.v[4]);
-    println!("c= {:x} {:x} {:x} {:x} {:x} ", c.v[0], c.v[1], c.v[2], c.v[3], c.v[4]);
-    //assert!(c==d);
-
-    let a = FSecp256 { v: [0xfffffffffffff, 0xfffffffffffff, 0xffffffdffffff, 0xfffffffffffff, 0xffffffffffff] };
-    let b = FSecp256 { v: [0xffffefffffc2e, 0xfffffffffffff, 0xfffffffffffff, 0xfffffffffffff, 0xffffffffffff] };
-    let c = FSecp256 { v: [0xffffefffffc30, 0xfffffffffffff, 0x1ffffff, 0x0, 0x0] };
-    let d = a.mul(&b);
-    println!("d= {:x} {:x} {:x} {:x} {:x} ", d.v[0], d.v[1], d.v[2], d.v[3], d.v[4]);
-    println!("c= {:x} {:x} {:x} {:x} {:x} ", c.v[0], c.v[1], c.v[2], c.v[3], c.v[4]);
-    // assert!(c==d);
-
-    let a = FSecp256 { v: [0xffffeeffffc30, 0xfffffffffffff, 0xfffffffffffff, 0xfffffffffffff, 0xffffffffffff] };
-    let b = FSecp256 { v: [0xffffefffffc2e, 0xfffffffffffff, 0xfffffffffffff, 0xfffffffffffff, 0xffffffffffff] };
-    let c = FSecp256 { v: [0xfffffff, 0x0, 0x0, 0x0, 0x0] };
-    let d = a.mul(&b);
-    println!("d= {:x} {:x} {:x} {:x} {:x} ", d.v[0], d.v[1], d.v[2], d.v[3], d.v[4]);
-    println!("c= {:x} {:x} {:x} {:x} {:x} ", c.v[0], c.v[1], c.v[2], c.v[3], c.v[4]);
-    // assert!(c==d);
-
-}
-
-#[test]
-fn fc2f_sqr_tests() {
-    let a = FSecp256 { v: [0x5fc94ec2e5969, 0xbcc0ceac1c027, 0x15e19b8675e50, 0xd2504ff08c53, 0x67d996df37bb] };
-    let c = FSecp256 { v: [0x3d2017b7ae554, 0xe4615d31d4d02, 0x80e06838043a3, 0x1a963f9a882ae, 0x33fc48fae1a2] };
-    let d = a.sqr();
-    assert!(c==d);
-
-    let d = a.sqr();
-    let drt = d.sqrt().unwrap();
-    let drt2  = drt.sqr();
-    assert!(drt2==d);
-
-    let a = FSecp256 { v: [0xed5d8621f9a0f, 0x99ba782a5c24b, 0x611e4b2c86ae4, 0xa8bdea00cdbac, 0x69c2d9e078fd] };
-    let c = FSecp256 { v: [0x4d0857c311393, 0x1f8dc96326d70, 0xcabd6a82b0466, 0xdb79349f642e2, 0xef9732d3a3fe] };
-    let d = a.sqr();
-    assert!(c==d);
-
-    let d = a.sqr();
-    let drt = d.sqrt().unwrap();
-    let drt2  = drt.sqr();
-    assert!(drt2==d);
-
-    let a = FSecp256 { v: [0x10e9a8a3bf39b, 0x3bac7d736f907, 0x2e92b3d7128a1, 0x839a5a5f8b5e5, 0x4f4a681760ea] };
-    let c = FSecp256 { v: [0x47c5ec3e03749, 0x5c82afbea0934, 0x124ed9cd65c6a, 0xf69676df700e, 0x276bc6dfcc4a] };
-    let d = a.sqr();
-    assert!(c==d);
-
-    let d = a.sqr();
-    let drt = d.sqrt().unwrap();
-    let drt2 = drt.sqr();
-    assert!(drt2==d);
-
-    let a = FSecp256 { v: [0x79cb518e6f2d0, 0xc58b473d3f06e, 0x7a4d3c0bcbfd2, 0x940f09ebcbcc4, 0x3b594a97a501] };
-    let c = FSecp256 { v: [0xeaec65b8bbc45, 0x698e3afb0d19b, 0xc9748be37667d, 0xd974d88cc4d37, 0x928d6680c372] };
-    let d = a.sqr();
-    assert!(c==d);
-
-    let d = a.sqr();
-    let drt = d.sqrt().unwrap();
-    let drt2  = drt.sqr();
-    assert!(drt2==d);
-
-    let a = FSecp256 { v: [0x816035b8ec4f2, 0xad08265dfe22a, 0xc5f9979494f00, 0xb7239658c0da7, 0x91901b59cadd] };
-    let c = FSecp256 { v: [0x87366950a62b7, 0x5c417fe974495, 0xda88bf4f47435, 0xe7be161e5b3c0, 0xc12885784522] };
-    let d = a.sqr();
-    assert!(c==d);
-
-    let d = a.sqr();
-    let drt = d.sqrt().unwrap();
-    let drt2  = drt.sqr();
-    assert!(drt2==d);
-
-}
-
-#[test]
-fn fc2f_inv_tests() {
-
-    let a = FSecp256 { v: [0x5fc94ec2e5969, 0xbcc0ceac1c027, 0x15e19b8675e50, 0xd2504ff08c53, 0x67d996df37bb] };
-    let ainv = a.inv();
-    let mut one = a.mul(&ainv);
-    one.normalize();
-    println!("one == {:?}",one);
-    assert!( one.is_one() );
-
-    let a = FSecp256 { v: [0x3d2017b7ae554, 0xe4615d31d4d02, 0x80e06838043a3, 0x1a963f9a882ae, 0x33fc48fae1a2] };
-    let ainv = a.inv();
-    let mut one = a.mul(&ainv);
-    one.normalize();
-    assert!( one.is_one() );
-
-    let a = FSecp256 { v: [0xed5d8621f9a0f, 0x99ba782a5c24b, 0x611e4b2c86ae4, 0xa8bdea00cdbac, 0x69c2d9e078fd] };
-    let ainv = a.inv();
-    let mut one = a.mul(&ainv);
-    one.normalize();
-    assert!( one.is_one() );
-
-    let a = FSecp256 { v: [0x4d0857c311393, 0x1f8dc96326d70, 0xcabd6a82b0466, 0xdb79349f642e2, 0xef9732d3a3fe] };
-    let ainv = a.inv();
-    let mut one = a.mul(&ainv);
-    one.normalize();
-    assert!( one.is_one() );
-
-    let a = FSecp256 { v: [0x10e9a8a3bf39b, 0x3bac7d736f907, 0x2e92b3d7128a1, 0x839a5a5f8b5e5, 0x4f4a681760ea] };
-    let ainv = a.inv();
-    let mut one = a.mul(&ainv);
-    one.normalize();
-    assert!( one.is_one() );
-
-    let a = FSecp256 { v: [0x47c5ec3e03749, 0x5c82afbea0934, 0x124ed9cd65c6a, 0xf69676df700e, 0x276bc6dfcc4a] };
-    let ainv = a.inv();
-    let mut one = a.mul(&ainv);
-    one.normalize();
-    assert!( one.is_one() );
-
-    let a = FSecp256 { v: [0x79cb518e6f2d0, 0xc58b473d3f06e, 0x7a4d3c0bcbfd2, 0x940f09ebcbcc4, 0x3b594a97a501] };
-    let ainv = a.inv();
-    let mut one = a.mul(&ainv);
-    one.normalize();
-    assert!( one.is_one() );
-
-    let a = FSecp256 { v: [0xeaec65b8bbc45, 0x698e3afb0d19b, 0xc9748be37667d, 0xd974d88cc4d37, 0x928d6680c372] };
-    let ainv = a.inv();
-    let mut one = a.mul(&ainv);
-    one.normalize();
-    assert!( one.is_one() );
-
-    let a = FSecp256 { v: [0x816035b8ec4f2, 0xad08265dfe22a, 0xc5f9979494f00, 0xb7239658c0da7, 0x91901b59cadd] };
-    let ainv = a.inv();
-    let mut one = a.mul(&ainv);
-    one.normalize();
-    assert!( one.is_one() );
-
-    let a = FSecp256 { v: [0x87366950a62b7, 0x5c417fe974495, 0xda88bf4f47435, 0xe7be161e5b3c0, 0xc12885784522] };
-    let ainv = a.inv();
-    let mut one = a.mul(&ainv);
-    one.normalize();
-    assert!( one.is_one() );
-
-}
+        let a = FSecp256 { v: [0xef56a2f75b904, 0xe1df41f96ef17, 0x12a23ede91fc8, 0xd9507cf40f5cc, 0x8fa5308760e3] };
+        let b = FSecp256 { v: [0x544f9f64ac1f7, 0x44e3919b4a090, 0x260aeb700ad46, 0xfd0df8dacdfee, 0xe869c700ef3f] };
+        let c = FSecp256 { v: [0x3a8271f1f4e82, 0x86e420ef76dca, 0xc20c656e97711, 0xc98fae2e2dd95, 0xc2c8cfa49cbd] };
+        let d = a.mul(&b);
+        println!("d= {:x} {:x} {:x} {:x} {:x} ", d.v[0], d.v[1], d.v[2], d.v[3], d.v[4]);
+        assert!(c==d);
 
 
+        let a = FSecp256 { v: [0x0, 0x0, 0xffffffe000000, 0xfffffffffffff, 0xffffffffffff] };
+        let b = FSecp256 { v: [0xffffefffffc2e, 0xfffffffffffff, 0xfffffffffffff, 0xfffffffffffff, 0xffffffffffff] };
+        let c = FSecp256 { v: [0xffffefffffc2f, 0xfffffffffffff, 0x1ffffff, 0x0, 0x0] };
+        let d = a.mul(&b);
+        println!("d= {:x} {:x} {:x} {:x} {:x} ", d.v[0], d.v[1], d.v[2], d.v[3], d.v[4]);
+        println!("c= {:x} {:x} {:x} {:x} {:x} ", c.v[0], c.v[1], c.v[2], c.v[3], c.v[4]);
+        //assert!(c==d);
+
+        let a = FSecp256 { v: [0xfffffffffffff, 0xfffffffffffff, 0xffffffdffffff, 0xfffffffffffff, 0xffffffffffff] };
+        let b = FSecp256 { v: [0xffffefffffc2e, 0xfffffffffffff, 0xfffffffffffff, 0xfffffffffffff, 0xffffffffffff] };
+        let c = FSecp256 { v: [0xffffefffffc30, 0xfffffffffffff, 0x1ffffff, 0x0, 0x0] };
+        let d = a.mul(&b);
+        println!("d= {:x} {:x} {:x} {:x} {:x} ", d.v[0], d.v[1], d.v[2], d.v[3], d.v[4]);
+        println!("c= {:x} {:x} {:x} {:x} {:x} ", c.v[0], c.v[1], c.v[2], c.v[3], c.v[4]);
+        // assert!(c==d);
+
+        let a = FSecp256 { v: [0xffffeeffffc30, 0xfffffffffffff, 0xfffffffffffff, 0xfffffffffffff, 0xffffffffffff] };
+        let b = FSecp256 { v: [0xffffefffffc2e, 0xfffffffffffff, 0xfffffffffffff, 0xfffffffffffff, 0xffffffffffff] };
+        let c = FSecp256 { v: [0xfffffff, 0x0, 0x0, 0x0, 0x0] };
+        let d = a.mul(&b);
+        println!("d= {:x} {:x} {:x} {:x} {:x} ", d.v[0], d.v[1], d.v[2], d.v[3], d.v[4]);
+        println!("c= {:x} {:x} {:x} {:x} {:x} ", c.v[0], c.v[1], c.v[2], c.v[3], c.v[4]);
+        // assert!(c==d);
+
+    }
+
+    #[test]
+    fn fc2f_sqr_tests() {
+        let a = FSecp256 { v: [0x5fc94ec2e5969, 0xbcc0ceac1c027, 0x15e19b8675e50, 0xd2504ff08c53, 0x67d996df37bb] };
+        let c = FSecp256 { v: [0x3d2017b7ae554, 0xe4615d31d4d02, 0x80e06838043a3, 0x1a963f9a882ae, 0x33fc48fae1a2] };
+        let d = a.sqr();
+        assert!(c==d);
+
+        let d = a.sqr();
+        let drt = d.sqrt().unwrap();
+        let drt2  = drt.sqr();
+        assert!(drt2==d);
+
+        let a = FSecp256 { v: [0xed5d8621f9a0f, 0x99ba782a5c24b, 0x611e4b2c86ae4, 0xa8bdea00cdbac, 0x69c2d9e078fd] };
+        let c = FSecp256 { v: [0x4d0857c311393, 0x1f8dc96326d70, 0xcabd6a82b0466, 0xdb79349f642e2, 0xef9732d3a3fe] };
+        let d = a.sqr();
+        assert!(c==d);
+
+        let d = a.sqr();
+        let drt = d.sqrt().unwrap();
+        let drt2  = drt.sqr();
+        assert!(drt2==d);
+
+        let a = FSecp256 { v: [0x10e9a8a3bf39b, 0x3bac7d736f907, 0x2e92b3d7128a1, 0x839a5a5f8b5e5, 0x4f4a681760ea] };
+        let c = FSecp256 { v: [0x47c5ec3e03749, 0x5c82afbea0934, 0x124ed9cd65c6a, 0xf69676df700e, 0x276bc6dfcc4a] };
+        let d = a.sqr();
+        assert!(c==d);
+
+        let d = a.sqr();
+        let drt = d.sqrt().unwrap();
+        let drt2 = drt.sqr();
+        assert!(drt2==d);
+
+        let a = FSecp256 { v: [0x79cb518e6f2d0, 0xc58b473d3f06e, 0x7a4d3c0bcbfd2, 0x940f09ebcbcc4, 0x3b594a97a501] };
+        let c = FSecp256 { v: [0xeaec65b8bbc45, 0x698e3afb0d19b, 0xc9748be37667d, 0xd974d88cc4d37, 0x928d6680c372] };
+        let d = a.sqr();
+        assert!(c==d);
+
+        let d = a.sqr();
+        let drt = d.sqrt().unwrap();
+        let drt2  = drt.sqr();
+        assert!(drt2==d);
+
+        let a = FSecp256 { v: [0x816035b8ec4f2, 0xad08265dfe22a, 0xc5f9979494f00, 0xb7239658c0da7, 0x91901b59cadd] };
+        let c = FSecp256 { v: [0x87366950a62b7, 0x5c417fe974495, 0xda88bf4f47435, 0xe7be161e5b3c0, 0xc12885784522] };
+        let d = a.sqr();
+        assert!(c==d);
+
+        let d = a.sqr();
+        let drt = d.sqrt().unwrap();
+        let drt2  = drt.sqr();
+        assert!(drt2==d);
+
+    }
+
+    #[test]
+    fn fc2f_inv_tests() {
+
+        let a = FSecp256 { v: [0x5fc94ec2e5969, 0xbcc0ceac1c027, 0x15e19b8675e50, 0xd2504ff08c53, 0x67d996df37bb] };
+        let ainv = a.inv();
+        let mut one = a.mul(&ainv);
+        one.normalize();
+        println!("one == {:?}",one);
+        assert!( one.is_one() );
+
+        let a = FSecp256 { v: [0x3d2017b7ae554, 0xe4615d31d4d02, 0x80e06838043a3, 0x1a963f9a882ae, 0x33fc48fae1a2] };
+        let ainv = a.inv();
+        let mut one = a.mul(&ainv);
+        one.normalize();
+        assert!( one.is_one() );
+
+        let a = FSecp256 { v: [0xed5d8621f9a0f, 0x99ba782a5c24b, 0x611e4b2c86ae4, 0xa8bdea00cdbac, 0x69c2d9e078fd] };
+        let ainv = a.inv();
+        let mut one = a.mul(&ainv);
+        one.normalize();
+        assert!( one.is_one() );
+
+        let a = FSecp256 { v: [0x4d0857c311393, 0x1f8dc96326d70, 0xcabd6a82b0466, 0xdb79349f642e2, 0xef9732d3a3fe] };
+        let ainv = a.inv();
+        let mut one = a.mul(&ainv);
+        one.normalize();
+        assert!( one.is_one() );
+
+        let a = FSecp256 { v: [0x10e9a8a3bf39b, 0x3bac7d736f907, 0x2e92b3d7128a1, 0x839a5a5f8b5e5, 0x4f4a681760ea] };
+        let ainv = a.inv();
+        let mut one = a.mul(&ainv);
+        one.normalize();
+        assert!( one.is_one() );
+
+        let a = FSecp256 { v: [0x47c5ec3e03749, 0x5c82afbea0934, 0x124ed9cd65c6a, 0xf69676df700e, 0x276bc6dfcc4a] };
+        let ainv = a.inv();
+        let mut one = a.mul(&ainv);
+        one.normalize();
+        assert!( one.is_one() );
+
+        let a = FSecp256 { v: [0x79cb518e6f2d0, 0xc58b473d3f06e, 0x7a4d3c0bcbfd2, 0x940f09ebcbcc4, 0x3b594a97a501] };
+        let ainv = a.inv();
+        let mut one = a.mul(&ainv);
+        one.normalize();
+        assert!( one.is_one() );
+
+        let a = FSecp256 { v: [0xeaec65b8bbc45, 0x698e3afb0d19b, 0xc9748be37667d, 0xd974d88cc4d37, 0x928d6680c372] };
+        let ainv = a.inv();
+        let mut one = a.mul(&ainv);
+        one.normalize();
+        assert!( one.is_one() );
+
+        let a = FSecp256 { v: [0x816035b8ec4f2, 0xad08265dfe22a, 0xc5f9979494f00, 0xb7239658c0da7, 0x91901b59cadd] };
+        let ainv = a.inv();
+        let mut one = a.mul(&ainv);
+        one.normalize();
+        assert!( one.is_one() );
+
+        let a = FSecp256 { v: [0x87366950a62b7, 0x5c417fe974495, 0xda88bf4f47435, 0xe7be161e5b3c0, 0xc12885784522] };
+        let ainv = a.inv();
+        let mut one = a.mul(&ainv);
+        one.normalize();
+        assert!( one.is_one() );
+
+    }
 }
 

@@ -24,9 +24,9 @@ pub mod precomp;
 pub type SecpOrd = f_4141::FSecp256Ord;
 pub type Secp = secp256k1::P256<f_fc2f::FSecp256, SecpOrd>;
 
-use std::fmt::Debug;
+use std::fmt::{Debug,Display};
 
-pub trait Fq: Copy + Debug + Eq {
+pub trait Fq: Copy + Debug + Display + Eq {
 	const ONE: Self;
 	const ZERO: Self;
 	const NBITS: usize;
@@ -48,14 +48,13 @@ pub trait Fq: Copy + Debug + Eq {
 	fn to_bytes(&self, b: &mut [u8]);
 	fn from_bytes(b: &[u8]) -> Self;
 
-	fn rand(rng: &mut rand::Rng) -> Self;
+	fn rand(rng: &mut dyn rand::Rng) -> Self;
 	fn mul(&self, b: &Self) -> Self;
 	fn muli(&self, b: u64) -> Self;
 
 	fn equals(&self, b: &Self) -> bool;
 
 	// number of bits in representation
-	//fn nbits() -> usize;
 	fn bit(&self, i:u32) -> bool;
 
 	fn normalize(&mut self) ;
@@ -70,7 +69,7 @@ pub trait Fq: Copy + Debug + Eq {
 }
 
 /// trait needed by a field that represents Z modulo the order of a group
-pub trait Ford: Copy + Debug + Eq  {
+pub trait Ford: Copy + Debug + Display + Eq  {
 	const ONE: Self;
 	const ZERO: Self;
 	const NBITS: usize;
@@ -79,13 +78,14 @@ pub trait Ford: Copy + Debug + Eq  {
 	fn from_slice(r: &[u64]) -> Self;
 
 	fn is_zero(&self) -> bool;
-	fn rand(rng: &mut rand::Rng) -> Self;
+	fn rand(rng: &mut dyn rand::Rng) -> Self;
 
 	//fn nbits() -> usize;
 	fn bit(&self, i:usize) -> bool;
 	fn add(&self, r:&Self) -> Self;
 	fn sub(&self, r:&Self) -> Self;
 	fn mul(&self, b: &Self) -> Self;
+	fn pow_native(&self, n: u64) -> Self;
 	fn inv(&self) -> Self;
 	fn sqr(&self) -> Self;
 	fn neg(&self) -> Self;
@@ -97,7 +97,7 @@ pub trait Ford: Copy + Debug + Eq  {
 }
 
 
-pub trait ECGroup<F, T>: Eq + PartialEq
+pub trait ECGroup<F, T>: Eq + PartialEq + Debug + Display
 	where F: Fq, T: Ford,
 		Self: std::marker::Sized
 		   {
@@ -117,10 +117,8 @@ pub trait ECGroup<F, T>: Eq + PartialEq
 	/// checks that the point is actually on the curve, else returns Error
 	fn from_xy(x: &F, y: &F) -> Result<Self, &'static str>;
 
-	fn rand(rng: &mut rand::Rng) -> (T, Self);
+	fn rand(rng: &mut dyn rand::Rng) -> (T, Self);
 	// fn hash_to_curve(message: &[u8]) -> Self;
-	// fn to_bytes(p:&Self, b: &mut [u8], n:usize);
-	// fn from_bytes(b: &[u8]) -> Self;
 
 	fn is_infinity(&self) -> bool; 
 
