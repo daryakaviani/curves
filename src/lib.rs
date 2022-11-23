@@ -1,6 +1,5 @@
-#![feature(const_fn)]
 #![feature(test)]
-#![feature(specialization)]
+#![feature(min_specialization)]
 
 /// Trait for a generic field element in Zq
 ///
